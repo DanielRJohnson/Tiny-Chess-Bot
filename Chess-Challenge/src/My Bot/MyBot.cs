@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using ChessChallenge.API;
+using System.Diagnostics;
 
 public class MyBot : IChessBot
 {
@@ -11,7 +12,7 @@ public class MyBot : IChessBot
     {
         botIsWhite = board.IsWhiteToMove;
 
-        Console.WriteLine(Evaluation(board));
+        // Console.WriteLine(Evaluation(board));
         Move[] moves = board.GetLegalMoves();
         var moveScores = new List<float>();
 
@@ -26,7 +27,7 @@ public class MyBot : IChessBot
         {
             Console.Write(" " + moves[i].ToString().Substring(6) + ": " + moveScores[i] + ",");
         }
-        Console.WriteLine();
+        // Console.WriteLine();
         return moves[moveScores.IndexOf(botIsWhite ? moveScores.Max() : moveScores.Min())];
     }
 
@@ -49,9 +50,12 @@ public class MyBot : IChessBot
 
     public float Evaluation(Board board)
     {
+        Stopwatch stopwatch = new Stopwatch();
+        stopwatch.Start();
+
         if (board.IsDraw())
         {
-            return 200.0F * (botIsWhite ? -1 : 1);
+            return 0.0F;
         }
         else if (board.IsInCheckmate())
         {
@@ -67,6 +71,39 @@ public class MyBot : IChessBot
         evaluation += 3.0F * (pieceLists[2].Count - pieceLists[8].Count); // Bishops
         evaluation += 5.0F * (pieceLists[3].Count - pieceLists[8].Count); // Rooks
         evaluation += 9.0F * (pieceLists[4].Count - pieceLists[10].Count); // Queens
+
+        stopwatch.Stop();
+
+        // Get the elapsed time in milliseconds
+        TimeSpan elapsedTime = stopwatch.Elapsed;
+        double milliseconds = elapsedTime.TotalMilliseconds;
+
+       // Console.WriteLine($"Elapsed Time during start of evaluation: {milliseconds} ms");
+
+
+        stopwatch.Reset();
+        if (board.IsWhiteToMove)
+        {
+            evaluation += 0.1F * board.GetLegalMoves().Length;
+            board.ForceSkipTurn();
+            evaluation -= 0.1F * board.GetLegalMoves().Length;
+            board.UndoSkipTurn();
+        }
+        else
+        {
+            
+            evaluation -= 0.1F * board.GetLegalMoves().Length;
+            
+            board.ForceSkipTurn();
+            evaluation += 0.1F * board.GetLegalMoves().Length;
+            board.UndoSkipTurn();
+        }
+
+        // Get the elapsed time in milliseconds
+        elapsedTime = stopwatch.Elapsed;
+        milliseconds = elapsedTime.TotalMilliseconds;
+
+        //Console.WriteLine($"Elapsed Time during mobility evaluation: {milliseconds} ms");
 
         return evaluation;
     }

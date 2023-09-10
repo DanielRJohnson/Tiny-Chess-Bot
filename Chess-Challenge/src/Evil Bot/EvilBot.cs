@@ -11,10 +11,10 @@ public class EvilBot : IChessBot
     bool botIsWhite;
     public Move Think(Board board, Timer timer)
     {
-        Console.Write("Evil Bot is minmax at depth 3 with standard evaluation function");
+        //Console.Write("Evil Bot is minmax at depth 3 with standard evaluation function");
         botIsWhite = board.IsWhiteToMove;
 
-        Console.WriteLine(Evaluation(board));
+        //Console.WriteLine(Evaluation(board));
         Move[] moves = board.GetLegalMoves();
         var moveScores = new List<float>();
 
@@ -29,7 +29,7 @@ public class EvilBot : IChessBot
         {
             Console.Write(" " + moves[i].ToString().Substring(6) + ": " + moveScores[i] + ",");
         }
-        Console.WriteLine();
+        //Console.WriteLine();
         return moves[moveScores.IndexOf(botIsWhite ? moveScores.Max() : moveScores.Min())];
     }
 
