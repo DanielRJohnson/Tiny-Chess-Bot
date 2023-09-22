@@ -18,7 +18,7 @@ public class MyBot : IChessBot
         foreach (var move in moves)
         {
             board.MakeMove(move);
-            float score = alphaBeta(board, isMaximizing: !botIsWhite, -300, 300, depth: 2);
+            float score = alphaBeta(board, isMaximizing: !botIsWhite, -300, 300, depth: 4);
             //Console.WriteLine("Depth: " + 3 + " Score: " + score + " " + move);
             moveScores.Add(score);
             board.UndoMove(move);
