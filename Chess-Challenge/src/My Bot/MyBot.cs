@@ -2,60 +2,87 @@
 using System.Collections.Generic;
 using System.Linq;
 using ChessChallenge.API;
+using static System.Formats.Asn1.AsnWriter;
 
 public class MyBot : IChessBot
 {
     bool botIsWhite;
-
+    //Alpha Beta Search at Depth 2
     public Move Think(Board board, Timer timer)
     {
         botIsWhite = board.IsWhiteToMove;
 
-        Console.WriteLine(Evaluation(board));
         Move[] moves = board.GetLegalMoves();
         var moveScores = new List<float>();
 
         foreach (var move in moves)
         {
             board.MakeMove(move);
-            moveScores.Add(Minimax(board, isMaximizing: !botIsWhite, depth: 3));
+            float score = alphaBeta(board, isMaximizing: !botIsWhite, -300, 300, depth: 2);
+            //Console.WriteLine("Depth: " + 3 + " Score: " + score + " " + move);
+            moveScores.Add(score);
             board.UndoMove(move);
         }
+
+        
 
         for (int i = 0; i < moves.Length; i++)
         {
-            Console.Write(" " + moves[i].ToString().Substring(6) + ": " + moveScores[i] + ",");
+        //Console.Write(" " + moves[i].ToString().Substring(6) + ": " + moveScores[i] + ",");
         }
-        Console.WriteLine();
+        //Console.WriteLine();
         return moves[moveScores.IndexOf(botIsWhite ? moveScores.Max() : moveScores.Min())];
     }
 
-    public float Minimax(Board board, bool isMaximizing, int depth)
+    public float alphaBeta(Board board, bool isMaximizing, float alpha, float beta, int depth)
     {
+        
         if (board.IsDraw() || board.IsInCheckmate() || depth == 0)
         {
+            //Console.Write(board.CreateDiagram(false, false, false));
+            //Console.WriteLine(Evaluation(board));
             return Evaluation(board);
-        }
+        } 
 
-        var scores = new List<float>();
         foreach (var move in board.GetLegalMoves())
         {
             board.MakeMove(move);
-            scores.Add(Minimax(board, !isMaximizing, depth-1));
+            float score = alphaBeta(board, !isMaximizing, alpha, beta, depth - 1);
+            string indent = new string(' ', depth);
+            //Console.WriteLine(indent + "Depth: " + depth + " Score: " + score + " " + move);
             board.UndoMove(move);
+
+            if (isMaximizing) {
+                if (score >= beta)
+                {
+                    return beta;
+                }
+                if (score > alpha)
+                {
+                    alpha = score;
+                }
+            }
+            else {
+                if (score <= alpha) {
+                    return alpha;
+                }
+                if (score < beta) {
+                    beta = score;
+                }
+            }
         }
-        return isMaximizing ? scores.Max() : scores.Min();
+        return isMaximizing ? alpha : beta;
     }
 
     public float Evaluation(Board board)
     {
         if (board.IsDraw())
         {
-            return 200.0F * (botIsWhite ? -1 : 1);
+            return 0;
         }
         else if (board.IsInCheckmate())
         {
-            return 200.0F * (botIsWhite ? 1 : -1);
+            return 200.0F * (board.IsWhiteToMove ? -1 : 1);
         }
 
         // wp, wn, wb, wr, wq, wk, bp, bn, bb, br, bq, bk
