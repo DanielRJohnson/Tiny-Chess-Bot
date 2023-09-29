@@ -1,104 +1,104 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+﻿#define DEBUG
+
+using System;
 using ChessChallenge.API;
 
-public class TableEntry
-{
-    public ulong zobristKey;
-    public Move chosenMove;
-    public float chosenMoveEvaluation;
-    public int depth;
-
-    public TableEntry(ulong key, Move move, float eval, int _depth)
-    {
-        zobristKey = key;
-        chosenMove = move;
-        chosenMoveEvaluation = eval;
-        depth = _depth;
-    }
-}
 
 public class MyBot : IChessBot
 {
-    bool botIsWhite;
-    Move bestMove;
+    // track positions visited
     int numPositionsVisited;
     int numPositionsVisitedTotal;
 
-    const int numTTEntries = 1 << 20;
-    TableEntry[] tTable = new TableEntry[numTTEntries];
+    // "global" best move/score tracking
+    Move bestMove;
+    float bestScore = 0;
+
+    const float TIMER_FRACTION_ALLOTTED = 1.0F / 120;
+    const int MAX_DEPTH = 30;
+
+    // initialize transposition table
+    const int N_TT_ENTRIES = 1 << 20;
+    TableEntry[] tTable = new TableEntry[N_TT_ENTRIES];
+    // sizeof(TableEntry) * N_TT_ENTRIES = 8 * (1 >> 20) = 8388608 bytes = 8.388608 MB (max is 256 in rules)
 
     public Move Think(Board board, Timer timer)
     {
-        botIsWhite = board.IsWhiteToMove;
         numPositionsVisited = 0;
 
-        var bestScore = -30000.0F * (botIsWhite ? 1 : -1);
-        bestMove = Move.NullMove;
-
-        int depth;
-        for (depth = 1; depth <= 50; depth++)
+        int depth = 1;
+        // https://www.chessprogramming.org/Iterative_Deepening
+        for (; depth == 1 || (!TimeOut(timer) && depth < MAX_DEPTH); depth++)
         {
-            float score = Minimax(board, timer, botIsWhite, depth, 0);
-
-            if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
-                break;
+            Negamax(board, timer, depth, 0, -3000, 3000);
         }
 
-        Console.WriteLine("Positions Evaluated: {0} Time to Move: {1} (seconds) TT size: {2} Max depth: {3}",
-            numPositionsVisited, timer.MillisecondsElapsedThisTurn / 1000.0, numPositionsVisitedTotal, depth);
+#if DEBUG
+        Console.WriteLine("\nBest {0} ({1}). Positions Evaluated: {2}, ({3} total). Time to Move: {4} seconds. Max depth: {5}.",
+            bestMove, bestScore, numPositionsVisited, numPositionsVisitedTotal, timer.MillisecondsElapsedThisTurn / 1000.0, depth);
+#endif
 
         return bestMove.IsNull ? board.GetLegalMoves()[0] : bestMove;
     }
 
-    public float Minimax(Board board, Timer timer, bool isMaximizing, int depth, int ply)
+    // https://www.chessprogramming.org/Negamax
+    public float Negamax(Board board, Timer timer, int depth, int ply, float alpha, float beta)
     {
-        var playerSign = isMaximizing ? 1 : -1;
-        //if (timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining / 30)
-        //    return 30000 * playerSign; // Timed out, assure this path isn't taken
+        numPositionsVisited += 1; // update positions visited
+        numPositionsVisitedTotal += 1; 
+
+        if (board.IsInCheckmate()) return -30000.0F + ply; // checkmate bad, further checkmate better
+        if (board.IsRepeatedPosition()) return 0; // draw by repetition
+        if (depth == 0) return Evaluation(board); // max depth reached, return static evaluation
 
         ulong key = board.ZobristKey;
-        TableEntry entry = tTable[key % numTTEntries];
-
+        TableEntry entry = tTable[key % N_TT_ENTRIES]; // retrieve TT entry
+        // If there is a TT entry that has >= depth, return the evaluation already done
         if (entry is not null && entry.zobristKey == key && entry.depth >= depth)
         {
             return entry.chosenMoveEvaluation;
         }
 
-        numPositionsVisited += 1;
-        numPositionsVisitedTotal += 1;
-
-        if (depth == 0) return Evaluation(board);
-
-        if (board.IsRepeatedPosition()) return 0;
-
-        if (board.IsInCheckmate())
-        {
-            if (board.IsInCheck()) return -30000 * playerSign; // bot is mated, bad
-            else return 30000 * playerSign; // opponent is mated, good
-        }
-      
-        var scores = new List<float>();
         var moves = board.GetLegalMoves();
 
-        foreach (var move in moves)
+        var movePrios = new int[moves.Length]; // move priorities to search "good" moves first
+        for (int i = 0; i < moves.Length; i++) // https://www.chessprogramming.org/MVV-LVA
         {
-            board.MakeMove(move);
-            scores.Add(Minimax(board, timer, !isMaximizing, depth-1, ply+1));
-            board.UndoMove(move);
+            if (moves[i].IsCapture) movePrios[i] = 100 * ((int)moves[i].CapturePieceType - (int)moves[i].MovePieceType);
+            else movePrios[i] = 0;
         }
 
-        var chosenScore = isMaximizing ? scores.Max() : scores.Min();
-        var chosenMove = moves[scores.IndexOf(chosenScore)];
-        if (ply == 0)
-            bestMove = chosenMove;
-        tTable[key % numTTEntries] = new TableEntry(key, chosenMove, chosenScore, depth);
+        var maxScore = -30000.0F;
+        var maxMove = Move.NullMove;
 
-        return chosenScore;
+        for (int i = 0; i < moves.Length; i++) // main move search loop
+        {
+            for (int j = i + 1; j < moves.Length; j++) // Incrementally sort moves by priority, shift good prio left
+                if (movePrios[i] > movePrios[j])
+                    (moves[i], moves[j], movePrios[i], movePrios[j]) = (moves[j], moves[i], movePrios[j], movePrios[i]);
+
+            board.MakeMove(moves[i]);
+            var score = -Negamax(board, timer, depth - 1, ply + 1, -beta, -alpha); // make recursive search
+            board.UndoMove(moves[i]);
+
+            if (score > maxScore) {  // If we found a new best
+                maxScore = score;
+                maxMove = moves[i];
+                if (ply == 0) (bestMove, bestScore) = (moves[i], score); // we are the root, tell Think() this is best
+            }
+
+            // https://www.chessprogramming.org/Alpha-Beta
+            if (score > alpha) alpha = score;
+            if (score >= beta) break;
+        }
+
+        tTable[key % N_TT_ENTRIES] = new TableEntry(key, maxMove, maxScore, depth); // update TT with search just made
+
+        return maxScore;
     }
 
-    public float Evaluation(Board board)
+    // https://www.chessprogramming.org/Evaluation#Side_to_move_relative
+    public static float Evaluation(Board board)
     {
         // wp, wn, wb, wr, wq, wk, bp, bn, bb, br, bq, bk
         var pieceLists = board.GetAllPieceLists();
@@ -110,6 +110,26 @@ public class MyBot : IChessBot
         evaluation += 5.0F * (pieceLists[3].Count - pieceLists[8].Count); // Rooks
         evaluation += 9.0F * (pieceLists[4].Count - pieceLists[10].Count); // Queens
 
-        return evaluation;
+        return evaluation * (board.IsWhiteToMove ? 1 : -1);
+    }
+
+    public static bool TimeOut(Timer timer) => timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining * TIMER_FRACTION_ALLOTTED;
+}
+
+
+// https://www.chessprogramming.org/Transposition_Table
+public class TableEntry
+{
+    public ulong zobristKey; // hash of position
+    public Move chosenMove; // the best move previously found
+    public float chosenMoveEvaluation; // said move's evaluation
+    public int depth; // what depth we found this position at
+
+    public TableEntry(ulong key, Move move, float eval, int _depth)
+    {
+        zobristKey = key;
+        chosenMove = move;
+        chosenMoveEvaluation = eval;
+        depth = _depth;
     }
 }
