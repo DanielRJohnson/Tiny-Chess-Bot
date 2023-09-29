@@ -46,10 +46,11 @@ public class MyBot : IChessBot
     {
         numPositionsVisited += 1; // update positions visited
         numPositionsVisitedTotal += 1; 
+        var moves = board.GetLegalMoves();
 
         if (board.IsInCheckmate()) return -30000.0F + ply; // checkmate bad, further checkmate better
         if (board.IsRepeatedPosition()) return 0; // draw by repetition
-        if (depth == 0) return Evaluation(board); // max depth reached, return static evaluation
+        if (depth == 0) return Evaluation(board, moves.Length); // max depth reached, return static evaluation
 
         ulong key = board.ZobristKey;
         TableEntry entry = tTable[key % N_TT_ENTRIES]; // retrieve TT entry
@@ -58,8 +59,6 @@ public class MyBot : IChessBot
         {
             return entry.chosenMoveEvaluation;
         }
-
-        var moves = board.GetLegalMoves();
 
         var movePrios = new int[moves.Length]; // move priorities to search "good" moves first
         for (int i = 0; i < moves.Length; i++) // https://www.chessprogramming.org/MVV-LVA
@@ -98,7 +97,7 @@ public class MyBot : IChessBot
     }
 
     // https://www.chessprogramming.org/Evaluation#Side_to_move_relative
-    public static float Evaluation(Board board)
+    public static float Evaluation(Board board, int mobility)
     {
         // wp, wn, wb, wr, wq, wk, bp, bn, bb, br, bq, bk
         var pieceLists = board.GetAllPieceLists();
@@ -110,7 +109,7 @@ public class MyBot : IChessBot
         evaluation += 5.0F * (pieceLists[3].Count - pieceLists[8].Count); // Rooks
         evaluation += 9.0F * (pieceLists[4].Count - pieceLists[10].Count); // Queens
 
-        return evaluation * (board.IsWhiteToMove ? 1 : -1);
+        return (evaluation * (board.IsWhiteToMove ? 1 : -1)) + 0.1F * mobility;
     }
 
     public static bool TimeOut(Timer timer) => timer.MillisecondsElapsedThisTurn >= timer.MillisecondsRemaining * TIMER_FRACTION_ALLOTTED;
