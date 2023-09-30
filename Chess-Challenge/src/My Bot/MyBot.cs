@@ -1,7 +1,5 @@
-﻿#define DEBUG
-
-using System;
-using ChessChallenge.API;
+﻿using ChessChallenge.API;
+using static System.Console;
 
 
 public class MyBot : IChessBot
@@ -34,7 +32,7 @@ public class MyBot : IChessBot
         }
 
 #if DEBUG
-        Console.WriteLine("\nBest {0} ({1}). Positions Evaluated: {2}, ({3} total). Time to Move: {4} seconds. Max depth: {5}.",
+        WriteLine("\nBest {0} ({1}). Positions Evaluated: {2}, ({3} total). Time to Move: {4} seconds. Max depth: {5}.",
             bestMove, bestScore, numPositionsVisited, numPositionsVisitedTotal, timer.MillisecondsElapsedThisTurn / 1000.0, depth);
 #endif
 
